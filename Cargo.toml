@@ -5,12 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-axum = "0.6.1"
 tokio = { version = "1.23.1", features = ["rt-multi-thread", "full", "tracing"] }
-
-# Removing the "spantrace" feature makes the application run.
-# error-stack = { version = "0.2.4" }
-error-stack = { version = "0.2.4", features = ["spantrace"] }
 
 tracing = "0.1.37"
 tracing-appender = "0.2.2"

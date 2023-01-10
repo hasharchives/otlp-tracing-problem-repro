@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 
 use std::io;
-use std::{fmt, net::SocketAddr};
 
 use opentelemetry::{
     global,
@@ -15,87 +14,50 @@ use opentelemetry::{
 use opentelemetry_otlp::WithExportConfig;
 use tonic::metadata::MetadataMap;
 
-use axum::{http::StatusCode, routing::get, Router};
-use error_stack::{Context, Report};
+use tracing::{span, Level};
+use tracing_error::SpanTrace;
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{
     filter::{Directive, LevelFilter},
     fmt::writer::BoxMakeWriter,
     layer::{Layered, SubscriberExt},
-    util::TryInitError,
     EnvFilter, Registry,
 };
 
-#[derive(Debug)]
-pub struct SomeError;
-impl Context for SomeError {}
-
-impl fmt::Display for SomeError {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.write_str("oh no! An error")
-    }
-}
-
-async fn make_error() -> std::result::Result<&'static str, StatusCode> {
-    Err(Report::new(SomeError)).map_err(|report| {
-        // Any kind of tracing will make the task to spin forever.
-        // But commenting out both will allow the program to run.
-
-        // This line below behaves the same as the `error!`
-        // tracing::info!(error=?report, "Some error trace!");
-        tracing::error!(error=?report, "Some error trace!");
-
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    Ok("success")
-}
-
 #[tokio::main]
 async fn main() {
-    let _log_guard = init_logger();
-
-    let app = Router::new().route("/", get(make_error));
-
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    tracing::debug!("listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
-}
-
-pub fn init_logger() -> Result<(), TryInitError> {
-    let otlp_endpoint = "http://localhost:4317";
-
+    // let _log_guard = init_logger();
     let filter = std::env::var("RUST_LOG").map_or_else(
-        |_| EnvFilter::default().add_directive(Directive::from(LevelFilter::WARN)),
+        |_| EnvFilter::default().add_directive(Directive::from(LevelFilter::TRACE)),
         EnvFilter::new,
     );
 
-    let opentelemetry_layer = configure_opentelemetry_layer(otlp_endpoint);
-    let error_layer = tracing_error::ErrorLayer::default();
+    let otlp_endpoint = "http://localhost:4317";
 
+    let opentelemetry_layer = configure_opentelemetry_layer(otlp_endpoint);
     let output_writer = BoxMakeWriter::new(io::stderr);
     let output_layer = tracing_subscriber::fmt::layer()
         .with_ansi(true)
         .with_writer(output_writer);
 
-    let console_layer = console_subscriber::spawn();
+    let error_layer = tracing_error::ErrorLayer::default();
 
     tracing_subscriber::registry()
         .with(filter)
-        // The halting issues stop when:
-        // commenting out the OpenTelemetry layer
         .with(opentelemetry_layer)
-        // or commenting out the error layer
-        .with(error_layer)
         .with(output_layer)
-        .with(console_layer)
-        .try_init()?;
+        .with(error_layer)
+        .try_init()
+        .unwrap();
 
-    Ok(())
+    let span = span!(Level::INFO, "some_span");
+    let _entered = span.enter();
+
+    let captrued_span = SpanTrace::capture();
+    // Uncomment to let run to completion
+    // tracing::error!("Some error trace!");
+    tracing::error!(error=?captrued_span, "Some error trace!");
 }
 
 fn configure_opentelemetry_layer(
