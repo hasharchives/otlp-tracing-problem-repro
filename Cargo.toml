@@ -15,5 +15,3 @@ tonic = "0.8.3"
 opentelemetry = { version = "0.18.0", features = ["rt-tokio"]}
 opentelemetry-otlp = "0.11.0"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter", "json"] }
-console-subscriber = { git = "https://github.com/tokio-rs/console/", rev = "70fc2c5d694b76499a68eca271ce4e337a313cfd"}
-
